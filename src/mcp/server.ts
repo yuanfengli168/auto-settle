@@ -114,13 +114,15 @@ export async function startMcpServer(): Promise<void> {
     'settle_up',
     'Mark a debt as settled in Splitwise by creating a payment expense',
     {
-      amount: z.number().describe('Amount to settle in SGD'),
+      amount: z.number().describe('Amount to settle'),
+      currency: z.string().optional().describe('Currency code (SGD, USD, CNY, etc.). Defaults to SGD.'),
       friend_name: z.string().optional().describe('Friend name to settle with'),
       friend_id: z.number().optional().describe('Friend ID (if known)'),
     },
-    async ({ amount, friend_name, friend_id }) => {
+    async ({ amount, currency, friend_name, friend_id }) => {
       try {
         let fid = friend_id;
+        let cur = currency || 'SGD';
 
         if (!fid && friend_name) {
           const balances = await getBalance(friend_name);
@@ -138,6 +140,11 @@ export async function startMcpServer(): Promise<void> {
             };
           }
           fid = balances[0].friendId;
+
+          // Auto-detect currency from balance
+          if (!currency && balances[0].amounts.length === 1) {
+            cur = balances[0].amounts[0].currency;
+          }
         }
 
         if (!fid) {
@@ -147,12 +154,12 @@ export async function startMcpServer(): Promise<void> {
           };
         }
 
-        const result = await settleUp(fid, amount);
+        const result = await settleUp(fid, amount, cur);
         return {
           content: [
             {
               type: 'text' as const,
-              text: `✅ Settled SGD ${result.amount.toFixed(2)} with friend ID ${result.friendId}. Expense ID: ${result.expenseId}`,
+              text: `✅ Settled ${result.currency} ${result.amount.toFixed(2)} with ${result.friendName}. Expense ID: ${result.expenseId}`,
             },
           ],
         };

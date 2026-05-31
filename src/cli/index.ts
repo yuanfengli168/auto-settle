@@ -201,12 +201,14 @@ program
 program
   .command('settle')
   .description('Mark a debt as settled in Splitwise')
-  .requiredOption('-a, --amount <number>', 'Amount to settle (SGD)', parseFloat)
+  .requiredOption('-a, --amount <number>', 'Amount to settle', parseFloat)
+  .option('-c, --currency <code>', 'Currency code (SGD, USD, CNY, etc.)', 'SGD')
   .option('-f, --friend <name>', 'Friend name (will look up ID)')
   .option('--friend-id <id>', 'Friend ID directly')
   .action(async (options) => {
     try {
       let friendId = options.friendId ? parseInt(options.friendId) : undefined;
+      let currency = options.currency;
 
       if (!friendId && options.friend) {
         const balances = await getBalance(options.friend);
@@ -216,10 +218,18 @@ program
         }
         if (balances.length > 1) {
           console.error('Multiple friends match. Use --friend-id to specify:');
-          balances.forEach(b => console.log(`  ${b.friendName} (ID: ${b.friendId})`));
+          balances.forEach(b => {
+            const amounts = b.amounts.map(a => `${a.currency} ${a.amount.toFixed(2)}`).join(', ');
+            console.log(`  ${b.friendName} (ID: ${b.friendId}) — ${amounts}`);
+          });
           process.exit(1);
         }
         friendId = balances[0].friendId;
+
+        // Auto-detect currency from balance if only one currency
+        if (currency === 'SGD' && balances[0].amounts.length === 1 && balances[0].amounts[0].currency !== 'SGD') {
+          currency = balances[0].amounts[0].currency;
+        }
       }
 
       if (!friendId) {
@@ -227,8 +237,8 @@ program
         process.exit(1);
       }
 
-      const result = await settleUp(friendId, options.amount);
-      console.log(`\n✅ Settled SGD ${result.amount.toFixed(2)} with friend ID ${result.friendId}`);
+      const result = await settleUp(friendId, options.amount, currency);
+      console.log(`\n✅ Settled ${result.currency} ${result.amount.toFixed(2)} with ${result.friendName}`);
       console.log(`   Expense ID: ${result.expenseId}`);
       console.log(`   Settled at: ${result.settledAt}\n`);
     } catch (err: any) {
