@@ -1,6 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { getBalance } from '../core/balance.js';
+import { generateQR } from '../core/qr.js';
+import { settleUp } from '../core/settle.js';
 import { loadConfig } from '../config/index.js';
 
 export async function startMcpServer(): Promise<void> {
@@ -12,20 +15,27 @@ export async function startMcpServer(): Promise<void> {
   // Tool: Check Splitwise balance
   server.tool(
     'check_balance',
-    'Check your outstanding balance on Splitwise with a specific friend or overall',
+    'Check your outstanding balance on Splitwise with a specific friend or all friends',
     {
       friend_name: z.string().optional().describe('Friend name to check balance with. Omit for all friends.'),
     },
     async ({ friend_name }) => {
       try {
-        // TODO: implement with actual Splitwise API call
+        const balances = await getBalance(friend_name);
+
+        if (balances.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: 'No outstanding balances! 🎉' }],
+          };
+        }
+
+        const lines = balances.map(b => {
+          const dir = b.amount > 0 ? 'you owe' : 'owes you';
+          return `${b.friendName}: SGD ${Math.abs(b.amount).toFixed(2)} ${dir}`;
+        });
+
         return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Balance check${friend_name ? ` with ${friend_name}` : ''}: TODO — not yet implemented`,
-            },
-          ],
+          content: [{ type: 'text' as const, text: lines.join('\n') }],
         };
       } catch (err: any) {
         return {
@@ -42,18 +52,49 @@ export async function startMcpServer(): Promise<void> {
     'Generate a PayNow SGQR code for payment',
     {
       amount: z.number().describe('Amount in SGD'),
-      recipient_phone: z.string().describe('Recipient mobile number (e.g. +65XXXXXXXX)'),
+      recipient_phone: z.string().optional().describe('Recipient mobile number (e.g. +65XXXXXXXX). Uses config default if omitted.'),
       recipient_name: z.string().optional().describe('Recipient display name'),
       reference: z.string().optional().describe('Payment reference note'),
     },
     async ({ amount, recipient_phone, recipient_name, reference }) => {
       try {
-        // TODO: implement with actual QR generation
+        let phone = recipient_phone;
+        let name = recipient_name;
+
+        if (!phone || !name) {
+          try {
+            const config = loadConfig();
+            phone = phone || config.defaultRecipient.phone;
+            name = name || config.defaultRecipient.name;
+          } catch {
+            // No config, that's OK if explicitly provided
+          }
+        }
+
+        if (!phone) {
+          return {
+            content: [{ type: 'text' as const, text: 'Error: recipient_phone is required (or set defaultRecipient in config)' }],
+            isError: true,
+          };
+        }
+
+        const result = await generateQR({
+          recipientPhone: phone,
+          amount,
+          recipientName: name || 'Recipient',
+          reference: reference || 'auto-settle',
+        });
+
         return {
           content: [
             {
+              type: 'image' as const,
+              data: result.dataUrl.replace(/^data:image\/png;base64,/, ''),
+              mimeType: 'image/png',
+            },
+            {
               type: 'text' as const,
-              text: `PayNow QR: SGD ${amount} → ${recipient_name || recipient_phone}${reference ? ` (ref: ${reference})` : ''}\n\nTODO — QR image generation not yet implemented`,
+              text: `PayNow QR: SGD ${amount.toFixed(2)} → ${name || phone}`,
             },
           ],
         };
@@ -73,15 +114,43 @@ export async function startMcpServer(): Promise<void> {
     {
       amount: z.number().describe('Amount to settle in SGD'),
       friend_name: z.string().optional().describe('Friend name to settle with'),
+      friend_id: z.number().optional().describe('Friend ID (if known)'),
     },
-    async ({ amount, friend_name }) => {
+    async ({ amount, friend_name, friend_id }) => {
       try {
-        // TODO: implement with actual Splitwise API call
+        let fid = friend_id;
+
+        if (!fid && friend_name) {
+          const balances = await getBalance(friend_name);
+          if (balances.length === 0) {
+            return {
+              content: [{ type: 'text' as const, text: `No friend found matching "${friend_name}"` }],
+              isError: true,
+            };
+          }
+          if (balances.length > 1) {
+            const names = balances.map(b => `${b.friendName} (ID: ${b.friendId})`).join(', ');
+            return {
+              content: [{ type: 'text' as const, text: `Multiple friends match: ${names}. Please specify friend_id.` }],
+              isError: true,
+            };
+          }
+          fid = balances[0].friendId;
+        }
+
+        if (!fid) {
+          return {
+            content: [{ type: 'text' as const, text: 'Error: friend_name or friend_id is required' }],
+            isError: true,
+          };
+        }
+
+        const result = await settleUp(fid, amount);
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Settled SGD ${amount}${friend_name ? ` with ${friend_name}` : ''} in Splitwise.\n\nTODO — not yet implemented`,
+              text: `✅ Settled SGD ${result.amount.toFixed(2)} with friend ID ${result.friendId}. Expense ID: ${result.expenseId}`,
             },
           ],
         };

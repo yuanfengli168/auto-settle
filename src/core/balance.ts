@@ -1,32 +1,46 @@
-import { SplitwiseApi, SplitwiseConfig } from '../types/index.js';
+import { Splitwise } from 'splitwise';
+import { getSplitwiseClient } from './auth.js';
 
-export function createSplitwiseClient(config: SplitwiseConfig): SplitwiseApi {
-  // Will be implemented with splitwise npm package
-  throw new Error('Not implemented');
-}
-
-export async function getBalance(config: SplitwiseConfig, friendIdentifier?: string): Promise<{
-  friendName: string;
+export interface BalanceResult {
   friendId: number;
-  amount: number;
+  friendName: string;
+  amount: number; // positive = you owe them, negative = they owe you
   currency: string;
-}> {
-  // TODO: implement
-  // 1. Authenticate with Splitwise API
-  // 2. GET /api/v3.0/get_friends
-  // 3. Find friend (by name or pick first with balance)
-  // 4. Return net balance
-  throw new Error('Not implemented');
 }
 
-export async function settleUp(
-  config: SplitwiseConfig,
-  friendId: number,
-  amount: number
-): Promise<{ expenseId: number }> {
-  // TODO: implement
-  // 1. Authenticate with Splitwise API
-  // 2. POST /api/v3.0/create_expense with payment=true
-  // 3. Return expense ID
-  throw new Error('Not implemented');
+/**
+ * Get balance with a specific friend, or all friends.
+ */
+export async function getBalance(friendName?: string): Promise<BalanceResult[]> {
+  const sw = await getSplitwiseClient();
+  const friends = await sw.friends.list();
+
+  const results: BalanceResult[] = [];
+
+  for (const friend of friends) {
+    // Splitwise balance is from the friend's perspective:
+    // positive balance means the friend owes you
+    // We flip it: positive = you owe them
+    const youOwe = -(friend.balance ?? 0);
+
+    if (Math.abs(youOwe) < 0.01) continue; // skip zero balances
+
+    if (friendName) {
+      const name = `${friend.firstName || ''} ${friend.lastName || ''}`.trim().toLowerCase();
+      if (!name.includes(friendName.toLowerCase())) continue;
+    }
+
+    results.push({
+      friendId: friend.id,
+      friendName: `${friend.firstName || ''} ${friend.lastName || ''}`.trim(),
+      amount: Math.round(youOwe * 100) / 100,
+      currency: 'SGD', // Splitwise SGD default
+    });
+  }
+
+  if (friendName && results.length === 0) {
+    throw new Error(`No balance found with friend "${friendName}"`);
+  }
+
+  return results;
 }
