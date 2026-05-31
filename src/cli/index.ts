@@ -12,6 +12,7 @@ import { getBalance } from '../core/balance.js';
 import { generateQR, saveQRToFile, renderQRToTerminal, generateShareUrl } from '../core/qr.js';
 import { settleUp } from '../core/settle.js';
 import { loadHistory, addPaymentRecord, createPaymentRecord, saveScreenshot } from '../core/history.js';
+import { verifyScreenshot, crossVerify } from '../core/verify.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -270,6 +271,68 @@ program
       addPaymentRecord(record);
       console.log(`   Payment ID: ${record.id}`);
       console.log();
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── verify ───────────────────────────────────────────────────────────────────
+
+program
+  .command('verify')
+  .description('Verify a payment screenshot using OCR')
+  .requiredOption('-i, --image <path>', 'Path to payment screenshot')
+  .option('-a, --expected-amount <number>', 'Expected amount to cross-verify', parseFloat)
+  .option('-c, --expected-currency <code>', 'Expected currency code (SGD, USD, CNY)', 'SGD')
+  .option('-r, --expected-recipient <name>', 'Expected recipient name')
+  .action(async (options) => {
+    try {
+      console.log('🔍 Verifying payment screenshot...\n');
+
+      const result = await verifyScreenshot(options.image);
+
+      console.log('OCR Results:');
+      console.log(`  Amount:     ${result.amount !== null ? result.amount : 'NOT DETECTED'}`);
+      console.log(`  Currency:   ${result.currency || 'NOT DETECTED'}`);
+      console.log(`  Recipient:  ${result.recipientName || 'NOT DETECTED'}`);
+      console.log(`  Status:     ${result.paymentSuccess ? '✅ Successful' : '⚠️  Unclear'}`);
+      console.log(`  Confidence: ${(result.confidence * 100).toFixed(0)}%`);
+
+      if (result.warnings.length > 0) {
+        console.log('\n  Warnings:');
+        result.warnings.forEach(w => console.log(`    ⚠️  ${w}`));
+      }
+
+      // Cross-verify if expected values provided
+      if (options.expectedAmount) {
+        let expectedRecipient = options.expectedRecipient || '';
+        if (!expectedRecipient) {
+          try {
+            const config = loadConfig();
+            expectedRecipient = config.defaultRecipient.name;
+          } catch { /* no config */ }
+        }
+
+        const crossResult = crossVerify(
+          result,
+          options.expectedAmount,
+          options.expectedCurrency,
+          expectedRecipient
+        );
+
+        console.log('\nCross-verification:');
+        if (crossResult.valid) {
+          console.log('  ✅ Screenshot matches expected payment');
+        } else {
+          console.log('  ❌ Mismatch detected:');
+          crossResult.warnings.forEach(w => console.log(`    ⚠️  ${w}`));
+        }
+      }
+
+      if (options.json) {
+        console.log('\n' + JSON.stringify(result, null, 2));
+      }
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
