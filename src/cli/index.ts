@@ -1,11 +1,19 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { loadConfig } from '../config/index.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import readline from 'readline';
+import { loadConfig, saveConfig } from '../config/index.js';
+import { AppConfig } from '../types/index.js';
 import { authPKCE, authClientCredentials } from '../core/auth.js';
 import { getBalance } from '../core/balance.js';
-import { generateQR, saveQRToFile } from '../core/qr.js';
+import { generateQR, saveQRToFile, renderQRToTerminal } from '../core/qr.js';
 import { settleUp } from '../core/settle.js';
+
+const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
+const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
 const program = new Command();
 
@@ -13,6 +21,65 @@ program
   .name('auto-settle')
   .description('Automatically settle Splitwise debts with PayNow QR codes')
   .version('0.1.0');
+
+// ─── init ────────────────────────────────────────────────────────────────────
+
+program
+  .command('init')
+  .description('Initialize auto-settle configuration (interactive)')
+  .action(async () => {
+    console.log('\n🪄 auto-settle init\n');
+    console.log('This will create your config at ~/.auto-settle/config.json\n');
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    const question = (prompt: string): Promise<string> =>
+      new Promise((resolve) => rl.question(prompt, resolve));
+
+    // Splitwise credentials
+    console.log('First, set up Splitwise integration.');
+    console.log('Register your app at https://secure.splitwise.com/apps to get credentials.\n');
+
+    const consumerKey = await question('Splitwise Consumer Key: ');
+    const consumerSecret = await question('Splitwise Consumer Secret: ');
+
+    // Default recipient
+    console.log('\nNow set up your default PayNow recipient (e.g. your spouse).');
+    const recipientPhone = await question('Recipient phone number (e.g. +65XXXXXXXX): ');
+    const recipientName = await question('Recipient name (e.g. Wife): ');
+
+    const config: AppConfig = {
+      splitwise: {
+        consumerKey: consumerKey.trim(),
+        consumerSecret: consumerSecret.trim(),
+      },
+      defaultRecipient: {
+        phone: recipientPhone.trim(),
+        name: recipientName.trim(),
+      },
+      preferences: {
+        currency: 'SGD',
+      },
+    };
+
+    // Save config
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+
+    console.log(`\n✅ Config saved to ${CONFIG_PATH}`);
+    console.log('\nNext steps:');
+    console.log('  1. Run: auto-settle auth');
+    console.log('  2. Then: auto-settle balance\n');
+
+    rl.close();
+  });
+
+// ─── auth ────────────────────────────────────────────────────────────────────
 
 program
   .command('auth')
@@ -31,6 +98,8 @@ program
     }
   });
 
+// ─── balance ─────────────────────────────────────────────────────────────────
+
 program
   .command('balance')
   .description('Check your Splitwise balance')
@@ -46,8 +115,10 @@ program
 
       console.log('\n💰 Outstanding Balances:\n');
       for (const b of balances) {
-        const direction = b.amount > 0 ? 'you owe' : 'owes you';
-        console.log(`  ${b.friendName}: SGD ${Math.abs(b.amount).toFixed(2)} ${direction}`);
+        for (const a of b.amounts) {
+          const direction = a.amount > 0 ? 'you owe' : 'owes you';
+          console.log(`  ${b.friendName}: ${a.currency} ${Math.abs(a.amount).toFixed(2)} ${direction}`);
+        }
       }
       console.log();
     } catch (err: any) {
@@ -55,6 +126,8 @@ program
       process.exit(1);
     }
   });
+
+// ─── qr ──────────────────────────────────────────────────────────────────────
 
 program
   .command('qr')
@@ -64,11 +137,22 @@ program
   .option('-n, --name <name>', 'Recipient display name')
   .option('-r, --reference <text>', 'Payment reference')
   .option('-o, --output <file>', 'Save QR to file (PNG)')
+  .option('--no-terminal', 'Do not render QR in terminal')
   .action(async (options) => {
     try {
-      const config = loadConfig();
-      const phone = options.to || config.defaultRecipient.phone;
-      const name = options.name || config.defaultRecipient.name;
+      let phone = options.to;
+      let name = options.name;
+
+      if (!phone || !name) {
+        try {
+          const config = loadConfig();
+          phone = phone || config.defaultRecipient.phone;
+          name = name || config.defaultRecipient.name;
+        } catch {
+          // No config, that's OK if explicitly provided
+        }
+      }
+
       const amount = options.amount;
 
       if (!amount) {
@@ -84,28 +168,35 @@ program
       const params = {
         recipientPhone: phone,
         amount,
-        recipientName: name,
+        recipientName: name || 'Recipient',
         reference: options.reference || 'auto-settle',
       };
 
+      console.log(`\n📱 PayNow QR: SGD ${amount.toFixed(2)} → ${name || phone}`);
+
       if (options.output) {
-        const result = await saveQRToFile(params, options.output);
-        console.log(`\n📱 PayNow QR saved to: ${options.output}`);
-        console.log(`   Amount: SGD ${amount.toFixed(2)}`);
-        console.log(`   To: ${name} (${phone})\n`);
-      } else {
+        await saveQRToFile(params, options.output);
+        console.log(`   Saved to: ${options.output}\n`);
+      }
+
+      if (options.terminal !== false) {
+        console.log();
+        renderQRToTerminal(params);
+        console.log();
+      }
+
+      if (!options.output) {
+        // Also output data URL for programmatic use
         const result = await generateQR(params);
-        console.log(`\n📱 PayNow QR generated:`);
-        console.log(`   Amount: SGD ${amount.toFixed(2)}`);
-        console.log(`   To: ${name} (${phone})\n`);
-        // Output data URL for terminal rendering or pipe
-        console.log(result.dataUrl);
+        // Data URL is available but not printed to terminal by default
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
   });
+
+// ─── settle ──────────────────────────────────────────────────────────────────
 
 program
   .command('settle')
@@ -145,6 +236,8 @@ program
       process.exit(1);
     }
   });
+
+// ─── mcp ─────────────────────────────────────────────────────────────────────
 
 program
   .command('mcp', { hidden: true })

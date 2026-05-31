@@ -17,3 +17,8 @@ declare module 'paynowqr' {
 
   export default PayNowQR;
 }
+
+declare module 'qrcode-terminal' {
+  function generate(text: string, options: { small: boolean }, callback: (code: string) => void): void;
+  function generate(text: string, callback: (code: string) => void): void;
+}

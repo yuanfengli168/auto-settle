@@ -10,83 +10,159 @@ Monthly workflow:
 3. Scan and pay via your bank app
 4. Mark as settled in Splitwise
 
-## Why
+Works as a **CLI tool** and an **MCP server** (for AI assistants like Claude).
 
-Paying your spouse/friends back on Splitwise every month is easy to forget. Auto-settle automates the tedious parts (checking balances, generating QR, settling up) while keeping you in control of the actual money transfer.
+## Install
 
-## Features (MVP1)
+```bash
+npm install -g auto-settle
+```
 
-- **CLI** — check balance, generate QR, settle up from terminal
-- **MCP Server** — let AI assistants (Claude, Cursor, etc.) call these tools via Model Context Protocol
-- **SGQR Generation** — PayNow-compatible QR codes for Singapore bank transfers
-- **Splitwise Integration** — OAuth2 + API to read balances and settle expenses
+Or run directly:
+```bash
+npx auto-settle init
+```
+
+## Quick Start
+
+### 1. Initialize config
+
+```bash
+auto-settle init
+```
+
+This will ask for:
+- Splitwise Consumer Key & Secret (get them at https://secure.splitwise.com/apps)
+- Default PayNow recipient (phone number + name)
+
+Config is saved to `~/.auto-settle/config.json`.
+
+### 2. Authenticate
+
+```bash
+# Client Credentials (simpler, for your own data)
+auto-settle auth --client-credentials
+
+# Or PKCE OAuth2 (opens browser, for end-user apps)
+auto-settle auth
+```
+
+Token is saved to `~/.auto-settle/oauth.json`.
+
+### 3. Check balance
+
+```bash
+# All friends
+auto-settle balance
+
+# Specific friend
+auto-settle balance --friend "Wife"
+```
+
+### 4. Generate PayNow QR
+
+```bash
+# Uses default recipient from config
+auto-settle qr --amount 150
+
+# Specify recipient
+auto-settle qr --amount 150 --to +65XXXXXXXX --name "Wife"
+
+# Save to file instead of terminal
+auto-settle qr --amount 150 --output payment.png
+```
+
+### 5. Settle up
+
+```bash
+# By friend name
+auto-settle settle --amount 150 --friend "Wife"
+
+# By friend ID
+auto-settle settle --amount 150 --friend-id 12345
+```
+
+## MCP Server
+
+Use auto-settle with AI assistants (Claude, Cursor, etc.):
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "auto-settle": {
+      "command": "npx",
+      "args": ["auto-settle", "mcp"]
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+| Tool | Description |
+|---|---|
+| `check_balance` | Check Splitwise balance with a friend or all friends |
+| `generate_paynow_qr` | Generate PayNow QR code with specified amount |
+| `settle_up` | Mark debt as settled in Splitwise |
+
+Then just ask your AI: *"How much do I owe my wife?"* or *"Generate a QR for $150"*
+
+## Architecture
+
+```
+src/
+├── cli/index.ts          # CLI entry (Commander.js)
+├── mcp/server.ts         # MCP server entry
+├── core/
+│   ├── auth.ts           # OAuth2 (PKCE + Client Credentials)
+│   ├── balance.ts        # Splitwise balance query
+│   ├── qr.ts             # PayNow SGQR generation
+│   └── settle.ts         # Splitwise settle up
+├── config/index.ts       # Config management
+└── types/index.ts        # Shared types
+```
 
 ## Tech Stack
 
 | Component | Choice |
 |---|---|
 | Language | TypeScript |
-| Runtime | Node.js |
 | CLI | Commander.js |
 | MCP | @modelcontextprotocol/sdk |
-| Splitwise | splitwise npm package |
-| QR | paynow-qr + qrcode |
-| Config | ~/.auto-settle/config.json |
-| License | MIT |
+| Splitwise | splitwise v2 SDK |
+| QR | paynowqr + qrcode + qrcode-terminal |
+| Validation | Zod |
 
-## Project Structure (Planned)
+## Security
 
-```
-auto-settle/
-├── src/
-│   ├── core/              # Core logic (pure functions)
-│   │   ├── balance.ts     # Fetch Splitwise balance
-│   │   ├── qr.ts          # Generate SGQR / PayNow QR
-│   │   └── settle.ts      # Splitwise settle up
-│   ├── cli/               # CLI entry (Commander.js)
-│   │   └── index.ts
-│   ├── mcp/               # MCP Server entry
-│   │   └── server.ts      # Expose tools to AI assistants
-│   └── config/            # Configuration management
-│       └── index.ts
-├── docs/
-│   └── design-doc.md      # Design document
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+- **No bank API access** — we never touch bank credentials or initiate transfers
+- **QR codes are read-only** — they only encode payment instructions
+- **OAuth tokens stored locally** — `~/.auto-settle/oauth.json` (gitignored)
+- **You confirm every payment** — actual money transfer requires manual bank app confirmation
+- **Splitwise Self-Serve API** — rate-limited, personal use only
 
-## Quick Start (Coming Soon)
+## Config Reference
 
-```bash
-npm install -g auto-settle
-auto-settle auth          # OAuth2 with Splitwise
-auto-settle balance       # Check what you owe
-auto-settle qr            # Generate PayNow QR code
-auto-settle settle        # Mark as settled in Splitwise
-```
+`~/.auto-settle/config.json`:
 
-### MCP Mode
-
-```bash
-auto-settle --mcp         # Start as MCP server
-```
-
-Or add to Claude Desktop config:
 ```json
 {
-  "mcpServers": {
-    "auto-settle": {
-      "command": "npx",
-      "args": ["auto-settle", "--mcp"]
-    }
+  "splitwise": {
+    "consumerKey": "YOUR_KEY",
+    "consumerSecret": "YOUR_SECRET"
+  },
+  "defaultRecipient": {
+    "phone": "+65XXXXXXXX",
+    "name": "Wife"
+  },
+  "preferences": {
+    "currency": "SGD"
   }
 }
 ```
-
-## Status
-
-🚧 MVP1 in progress — see [design-doc.md](docs/design-doc.md) for details.
 
 ## License
 

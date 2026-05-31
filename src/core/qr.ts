@@ -1,5 +1,6 @@
 import PayNowQR from 'paynowqr';
 import QRCode from 'qrcode';
+import qrcodeTerminal from 'qrcode-terminal';
 
 export interface QRCodeResult {
   qrString: string;
@@ -14,13 +15,9 @@ export interface PayNowQRParams {
 }
 
 /**
- * Generate a PayNow SGQR code image.
- *
- * The QR code only encodes payment instructions (recipient + amount).
- * No banking credentials are included. User must still confirm
- * payment in their bank app after scanning.
+ * Generate a PayNow SGQR string.
  */
-export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> {
+export function generateQRString(params: PayNowQRParams): string {
   const { recipientPhone, amount, recipientName, reference } = params;
 
   const pn = new PayNowQR({
@@ -31,9 +28,15 @@ export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> 
     editable: false,
   });
 
-  const qrString = pn.generate();
+  return pn.generate();
+}
 
-  // Render to PNG data URL
+/**
+ * Generate a PayNow SGQR code image (data URL).
+ */
+export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> {
+  const qrString = generateQRString(params);
+
   const dataUrl = await QRCode.toDataURL(qrString, {
     width: 400,
     margin: 2,
@@ -47,7 +50,17 @@ export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> 
 }
 
 /**
- * Save QR code to a file.
+ * Render QR code to terminal (ASCII art).
+ */
+export function renderQRToTerminal(params: PayNowQRParams): void {
+  const qrString = generateQRString(params);
+  qrcodeTerminal.generate(qrString, { small: true }, (code: string) => {
+    console.log(code);
+  });
+}
+
+/**
+ * Save QR code to a PNG file.
  */
 export async function saveQRToFile(
   params: PayNowQRParams,

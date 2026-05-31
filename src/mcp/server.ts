@@ -29,10 +29,12 @@ export async function startMcpServer(): Promise<void> {
           };
         }
 
-        const lines = balances.map(b => {
-          const dir = b.amount > 0 ? 'you owe' : 'owes you';
-          return `${b.friendName}: SGD ${Math.abs(b.amount).toFixed(2)} ${dir}`;
-        });
+        const lines = balances.flatMap(b =>
+          b.amounts.map(a => {
+            const dir = a.amount > 0 ? 'you owe' : 'owes you';
+            return `${b.friendName}: ${a.currency} ${Math.abs(a.amount).toFixed(2)} ${dir}`;
+          })
+        );
 
         return {
           content: [{ type: 'text' as const, text: lines.join('\n') }],
