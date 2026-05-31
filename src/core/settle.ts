@@ -13,8 +13,13 @@ export interface SettleResult {
 /**
  * Settle up a debt in Splitwise by creating a payment expense.
  *
- * Uses expenses.create with payment=true and currencyCode
- * to properly handle multi-currency debts.
+ * This creates a "payment" record in Splitwise showing that you paid
+ * the specified amount to your friend, reducing the balance.
+ *
+ * Supports partial payments and overpayments:
+ * - Partial: owe 148.50, pay 100 → remaining balance stays
+ * - Over: owe 148.50, pay 200 → friend now owes you 51.50
+ * Splitwise handles net balance automatically.
  */
 export async function settleUp(
   friendId: number,
@@ -24,36 +29,34 @@ export async function settleUp(
 ): Promise<SettleResult> {
   const sw = await getSplitwiseClient();
 
-  // Get current user ID
+  // Get current user and friend info
   const me = await sw.users.getCurrent();
   const friend = await sw.friends.get({ id: friendId });
+  const friendName = `${friend.firstName} ${friend.lastName || ''}`.trim();
 
-  // Determine who pays whom based on amount sign
-  // Positive amount = you owe them (you pay them)
-  // Negative amount = they owe you (they pay you)
-  const paidBy = amount > 0 ? me.id : friendId;
-  const owedBy = amount > 0 ? friendId : me.id;
-  const absAmount = Math.abs(amount);
+  // Create a payment expense
+  // paidShare = how much each person paid toward the expense
+  // owedShare = how much each person owes
+  // For a payment: I paid the amount, my friend's share is zero
+  const absAmount = Math.abs(amount).toFixed(2);
 
-  // Use expenses.create with payment=true for proper settlement
   const expense = await sw.expenses.create({
-    cost: absAmount.toFixed(2),
-    description: description || 'auto-settle payment',
+    cost: absAmount,
+    description: description || 'Payment',
     currencyCode: currency,
     payment: true,
-    friendId,
     users: [
-      { userId: paidBy, paidShare: absAmount.toFixed(2) },
-      { userId: owedBy, owedShare: absAmount.toFixed(2) },
+      { userId: me.id, paidShare: absAmount, owedShare: '0.00' },
+      { userId: friendId, paidShare: '0.00', owedShare: absAmount },
     ],
   });
 
   return {
     expenseId: expense.id,
-    amount: absAmount,
+    amount: Math.abs(amount),
     currency,
     friendId,
-    friendName: `${friend.firstName} ${friend.lastName || ''}`.trim(),
+    friendName,
     settledAt: new Date().toISOString(),
   };
 }

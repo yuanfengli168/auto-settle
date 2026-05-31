@@ -11,6 +11,7 @@ import { authPKCE, authClientCredentials } from '../core/auth.js';
 import { getBalance } from '../core/balance.js';
 import { generateQR, saveQRToFile, renderQRToTerminal, generateShareUrl } from '../core/qr.js';
 import { settleUp } from '../core/settle.js';
+import { loadHistory, addPaymentRecord, createPaymentRecord, saveScreenshot } from '../core/history.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -253,6 +254,62 @@ program
       if (result.currency !== 'SGD') {
         console.log(`\n   💡 ${result.currency} settled in Splitwise only. PayNow only supports SGD.`);
         console.log('      Use other methods (wire transfer, Wise, WeChat Pay, etc.) for the actual transfer.');
+      }
+
+      // Save to payment history
+      let config;
+      try { config = loadConfig(); } catch { config = null; }
+      const record = createPaymentRecord({
+        amount: result.amount,
+        currency: result.currency,
+        recipient: result.friendName,
+        recipientPhone: config?.defaultRecipient?.phone || '',
+        splitwiseExpenseId: result.expenseId,
+        note: `Settled via auto-settle`,
+      });
+      addPaymentRecord(record);
+      console.log(`   Payment ID: ${record.id}`);
+      console.log();
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── history ─────────────────────────────────────────────────────────────────
+
+program
+  .command('history')
+  .description('View payment history')
+  .option('-l, --limit <number>', 'Number of recent payments to show', '10')
+  .option('--json', 'Output as JSON')
+  .action(async (options) => {
+    try {
+      const history = loadHistory();
+      const limit = parseInt(options.limit, 10);
+
+      if (history.payments.length === 0) {
+        console.log('No payment history yet.');
+        return;
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(history, null, 2));
+        return;
+      }
+
+      const recent = history.payments.slice(-limit).reverse();
+      console.log('\n📜 Payment History:\n');
+      for (const p of recent) {
+        const status = p.status === 'settled' ? '✅' : '⏳';
+        const date = new Date(p.date).toLocaleDateString('en-SG', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
+        console.log(`  ${status} ${p.currency} ${p.amount.toFixed(2)} → ${p.recipient}  (${date})`);
+        if (p.note) console.log(`     Note: ${p.note}`);
+        if (p.qrShareUrl) console.log(`     QR: ${p.qrShareUrl}`);
+        if (p.screenshotPath) console.log(`     Screenshot: ${p.screenshotPath}`);
       }
       console.log();
     } catch (err: any) {
