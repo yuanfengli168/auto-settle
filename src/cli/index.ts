@@ -131,7 +131,7 @@ program
 
 program
   .command('qr')
-  .description('Generate a PayNow QR code')
+  .description('Generate a PayNow QR code (SGD only — PayNow only supports SGD)')
   .option('-a, --amount <number>', 'Amount in SGD', parseFloat)
   .option('-t, --to <phone>', 'Recipient phone number (e.g. +65XXXXXXXX)')
   .option('-n, --name <name>', 'Recipient display name')
@@ -173,6 +173,10 @@ program
       };
 
       console.log(`\n📱 PayNow QR: SGD ${amount.toFixed(2)} → ${name || phone}`);
+
+      // Remind user: PayNow only supports SGD
+      console.log('   ℹ️  PayNow only supports SGD. For other currencies, use a different transfer method');
+      console.log('      then run: auto-settle settle --amount X --currency USD --friend "Name"');
 
       if (options.output) {
         await saveQRToFile(params, options.output);
@@ -240,7 +244,12 @@ program
       const result = await settleUp(friendId, options.amount, currency);
       console.log(`\n✅ Settled ${result.currency} ${result.amount.toFixed(2)} with ${result.friendName}`);
       console.log(`   Expense ID: ${result.expenseId}`);
-      console.log(`   Settled at: ${result.settledAt}\n`);
+      console.log(`   Settled at: ${result.settledAt}`);
+      if (result.currency !== 'SGD') {
+        console.log(`\n   💡 ${result.currency} settled in Splitwise only. PayNow only supports SGD.`);
+        console.log('      Use other methods (wire transfer, Wise, WeChat Pay, etc.) for the actual transfer.');
+      }
+      console.log();
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
