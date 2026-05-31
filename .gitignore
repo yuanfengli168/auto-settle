@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+oauth.json
+*.png
+*.jpg
+.DS_Store
