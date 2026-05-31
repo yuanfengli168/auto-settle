@@ -1,21 +1,22 @@
-declare module 'paynowqr' {
-  interface PayNowQRParams {
-    phoneNumber?: string;
-    vpa?: string;
-    uen?: string;
-    amount?: number;
+declare module 'sgqr' {
+  interface SGQROptions {
+    number: string;
+    amount: string;
+    number_type?: 'MOBILE' | 'UEN';
+    merchant_name?: string;
+    comments?: string;
+    country_code?: string;
+    currency_code?: string;
+    expiry_date?: string;
     editable?: boolean;
-    expiry?: string;
-    name?: string;
-    reference?: string;
   }
 
-  class PayNowQR {
-    constructor(params: PayNowQRParams);
-    generate(): string;
-  }
+  function generate(options: SGQROptions): string;
+  function generate_code(options: SGQROptions & { type?: string; scale?: number }): Promise<Buffer | null>;
+  function generate_svg(options: SGQROptions): Promise<string>;
 
-  export default PayNowQR;
+  export { generate, generate_code, generate_svg };
+  export default { generate, generate_code, generate_svg };
 }
 
 declare module 'qrcode-terminal' {

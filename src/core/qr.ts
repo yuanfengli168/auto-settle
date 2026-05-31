@@ -1,4 +1,4 @@
-import PayNowQR from 'paynowqr';
+import sgqr from 'sgqr';
 import QRCode from 'qrcode';
 import qrcodeTerminal from 'qrcode-terminal';
 
@@ -20,15 +20,12 @@ export interface PayNowQRParams {
 export function generateQRString(params: PayNowQRParams): string {
   const { recipientPhone, amount, recipientName, reference } = params;
 
-  const pn = new PayNowQR({
-    phoneNumber: recipientPhone,
-    amount,
-    name: recipientName || 'Recipient',
-    reference: reference || 'auto-settle',
-    editable: false,
+  return sgqr.generate({
+    number: recipientPhone,
+    amount: amount.toFixed(2),
+    merchant_name: recipientName || 'Recipient',
+    comments: reference || 'auto-settle',
   });
-
-  return pn.generate();
 }
 
 /**
