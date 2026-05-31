@@ -5,3 +5,5 @@ oauth.json
 *.png
 *.jpg
 .DS_Store
+eng.traineddata
+config.json
