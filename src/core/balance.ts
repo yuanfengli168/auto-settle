@@ -5,17 +5,19 @@ export interface BalanceResult {
   friendId: number;
   friendName: string;
   amounts: { currency: string; amount: number }[];
-  /** Net amount in primary currency. Positive = you owe them. */
+  /** Net amount in primary currency. Positive = you owe them, negative = they owe you. */
   netAmount: number;
   currency: string;
 }
 
 /**
- * Get balance with a specific friend, or all friends with outstanding balances.
+ * Get balance with a specific friend, or all friends.
  *
- * Splitwise Friend.balance is an array of {currencyCode, amount}.
- * Positive amount = friend is owed money (you owe them).
- * We normalize so positive = you owe them, negative = they owe you.
+ * Splitwise Friend.balance[].amount:
+ *   Positive = friend owes you (they need to pay you)
+ *   Negative = you owe friend (you need to pay them)
+ *
+ * We flip it so: positive = you owe them, negative = they owe you.
  */
 export async function getBalance(friendName?: string): Promise<BalanceResult[]> {
   const sw = await getSplitwiseClient();
@@ -30,18 +32,17 @@ export async function getBalance(friendName?: string): Promise<BalanceResult[]> 
       if (!fullName.includes(friendName.toLowerCase())) continue;
     }
 
-    // Parse balances — friend.balance[].amount from their perspective
-    // Positive = they are owed money = you owe them
+    // Parse balances — flip sign so positive = you owe them
     const amounts: { currency: string; amount: number }[] = (friend.balance || []).map((b) => ({
       currency: b.currencyCode,
-      amount: parseFloat(b.amount),
+      amount: -parseFloat(b.amount), // flip: negative from Splitwise = you owe them
     }));
 
     // Filter out zero balances
     const nonZero = amounts.filter((a) => Math.abs(a.amount) >= 0.01);
     if (nonZero.length === 0) continue;
 
-    // Find primary currency (first one, or SGD if present)
+    // Find primary currency (SGD if present, otherwise first)
     const sgd = nonZero.find((a) => a.currency === 'SGD');
     const primary = sgd || nonZero[0];
 
