@@ -9,7 +9,7 @@ import { loadConfig, saveConfig } from '../config/index.js';
 import { AppConfig } from '../types/index.js';
 import { authPKCE, authClientCredentials } from '../core/auth.js';
 import { getBalance } from '../core/balance.js';
-import { generateQR, saveQRToFile, renderQRToTerminal } from '../core/qr.js';
+import { generateQR, saveQRToFile, renderQRToTerminal, generateShareUrl } from '../core/qr.js';
 import { settleUp } from '../core/settle.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
@@ -177,6 +177,11 @@ program
       // Remind user: PayNow only supports SGD
       console.log('   ℹ️  PayNow only supports SGD. For other currencies, use a different transfer method');
       console.log('      then run: auto-settle settle --amount X --currency USD --friend "Name"');
+
+      // Generate share URL for WhatsApp/Telegram
+      const shareUrl = generateShareUrl(params);
+      console.log(`\n   🔗 Share link (WhatsApp/Telegram):`);
+      console.log(`   ${shareUrl}\n`);
 
       if (options.output) {
         await saveQRToFile(params, options.output);

@@ -96,7 +96,7 @@ export async function startMcpServer(): Promise<void> {
             },
             {
               type: 'text' as const,
-              text: `PayNow QR: SGD ${amount.toFixed(2)} → ${name || phone}`,
+              text: `PayNow QR: SGD ${amount.toFixed(2)} → ${name || phone}\n\nShare link: ${result.shareUrl}`,
             },
           ],
         };

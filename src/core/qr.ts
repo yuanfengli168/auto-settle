@@ -5,6 +5,7 @@ import qrcodeTerminal from 'qrcode-terminal';
 export interface QRCodeResult {
   qrString: string;
   dataUrl: string; // base64 PNG data URL
+  shareUrl?: string; // online QR image URL (for WhatsApp/Telegram sharing)
 }
 
 export interface PayNowQRParams {
@@ -29,6 +30,24 @@ export function generateQRString(params: PayNowQRParams): string {
 }
 
 /**
+ * Generate a shareable URL for the QR code using qrserver.com API.
+ *
+ * This creates an online image URL that can be sent via WhatsApp/Telegram.
+ * The QR data (payee info + amount) is embedded in the URL as query params.
+ *
+ * Security note:
+ * - The API only renders QR images, it doesn't store or process payments
+ * - QR codes are inherently plaintext (anyone scanning sees the same data)
+ * - The URL contains the recipient phone number — only share with intended recipients
+ * - For maximum privacy, use --output to save locally instead
+ */
+export function generateShareUrl(params: PayNowQRParams, size: number = 400): string {
+  const qrString = generateQRString(params);
+  const encoded = encodeURIComponent(qrString);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}`;
+}
+
+/**
  * Generate a PayNow SGQR code image (data URL).
  */
 export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> {
@@ -43,7 +62,9 @@ export async function generateQR(params: PayNowQRParams): Promise<QRCodeResult> 
     },
   });
 
-  return { qrString, dataUrl };
+  const shareUrl = generateShareUrl(params);
+
+  return { qrString, dataUrl, shareUrl };
 }
 
 /**
