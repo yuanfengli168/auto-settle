@@ -13,6 +13,7 @@ import { generateQR, saveQRToFile, renderQRToTerminal, generateShareUrl } from '
 import { settleUp } from '../core/settle.js';
 import { loadHistory, addPaymentRecord, createPaymentRecord, saveScreenshot } from '../core/history.js';
 import { verifyScreenshot, crossVerify } from '../core/verify.js';
+import { generateMeme } from '../core/meme.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -373,6 +374,60 @@ program
         if (p.note) console.log(`     Note: ${p.note}`);
         if (p.qrShareUrl) console.log(`     QR: ${p.qrShareUrl}`);
         if (p.screenshotPath) console.log(`     Screenshot: ${p.screenshotPath}`);
+      }
+      console.log();
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── meme ────────────────────────────────────────────────────────────────────
+
+program
+  .command('meme')
+  .description('Generate a pixel-art debt collection meme')
+  .option('-f, --friend <name>', 'Friend name to target in meme')
+  .option('-o, --output <file>', 'Save meme to file (default: ~/.auto-settle/meme.png)')
+  .option('--zh', 'Use Chinese text')
+  .action(async (options) => {
+    try {
+      const balances = await getBalance(options.friend);
+
+      if (balances.length === 0) {
+        console.log('✅ No outstanding balances — nothing to meme about!');
+        return;
+      }
+
+      // Get user name from config
+      let userName = 'you';
+      try {
+        const config = loadConfig();
+        userName = config.userName || 'you';
+      } catch { /* no config */ }
+
+      const outputPath = await generateMeme({
+        friendName: options.friend,
+        userName,
+        balances,
+        output: options.output,
+        lang: options.zh ? 'zh' : 'en',
+      });
+
+      console.log('\n🎨 Meme generated!');
+      console.log(`   ${outputPath}`);
+
+      // Generate GitHub raw URL if it's in assets/memes/
+      const fileName = path.basename(outputPath);
+      console.log(`   https://raw.githubusercontent.com/yuanfengli168/auto-settle/main/assets/memes/${fileName}`);
+      console.log();
+
+      // Print summary
+      for (const b of balances) {
+        for (const a of b.amounts) {
+          const direction = a.amount > 0 ? 'you owe' : `owes you`;
+          console.log(`   ${b.friendName}: ${a.currency} ${Math.abs(a.amount).toFixed(2)} ${direction}`);
+        }
       }
       console.log();
     } catch (err: any) {

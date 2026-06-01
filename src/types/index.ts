@@ -30,6 +30,7 @@ export interface AppConfig {
   preferences: {
     currency: string;
   };
+  userName?: string;
 }
 
 export const DEFAULT_CONFIG_PATH = '~/.auto-settle/config.json';
