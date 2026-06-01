@@ -106,9 +106,39 @@ Add to `claude_desktop_config.json`:
 |---|---|
 | `check_balance` | Check Splitwise balance with a friend or all friends |
 | `generate_paynow_qr` | Generate PayNow QR code with specified amount |
+| `generate_meme` | Generate pixel-art debt collection meme |
 | `settle_up` | Mark debt as settled in Splitwise |
 
 Then just ask your AI: *"How much do I owe my wife?"* or *"Generate a QR for $150"*
+
+### 6. Generate debt meme 🎨
+
+Pixel-art debt collection meme — perfect for reminding friends they owe you.
+
+```bash
+# Generate meme for all friends
+auto-settle meme
+
+# Target a specific friend
+auto-settle meme --friend "Wife"
+
+# Chinese version
+auto-settle meme --zh
+
+# Save to custom path
+auto-settle meme -o ~/meme.png
+```
+
+Each meme includes:
+- Pixel-art debt collector character 💰
+- Speech bubble with demand
+- Itemized debt breakdown with your name
+- Random classic movie quote about money/debts
+
+Set your name in config so it shows "owes **Jacky**" instead of "owes you":
+```json
+{ "userName": "Jacky" }
+```
 
 ## Architecture
 
@@ -120,7 +150,10 @@ src/
 │   ├── auth.ts           # OAuth2 (PKCE + Client Credentials)
 │   ├── balance.ts        # Splitwise balance query
 │   ├── qr.ts             # PayNow SGQR generation
-│   └── settle.ts         # Splitwise settle up
+│   ├── meme.ts           # Pixel-art debt meme generator
+│   ├── settle.ts         # Splitwise settle up
+│   ├── verify.ts         # Payment screenshot OCR verification
+│   └── history.ts        # Payment history tracking
 ├── config/index.ts       # Config management
 └── types/index.ts        # Shared types
 ```
@@ -133,7 +166,9 @@ src/
 | CLI | Commander.js |
 | MCP | @modelcontextprotocol/sdk |
 | Splitwise | splitwise v2 SDK |
-| QR | paynowqr + qrcode + qrcode-terminal |
+| QR | sgqr + qrcode + qrcode-terminal |
+| Meme | canvas (node-canvas) |
+| OCR | tesseract.js |
 | Validation | Zod |
 
 ## Security
@@ -142,7 +177,9 @@ src/
 - **QR codes are read-only** — they only encode payment instructions
 - **OAuth tokens stored locally** — `~/.auto-settle/oauth.json` (gitignored)
 - **You confirm every payment** — actual money transfer requires manual bank app confirmation
+- **OCR verification** — payment screenshots cross-verified before settling
 - **Splitwise Self-Serve API** — rate-limited, personal use only
+- **Meme images are local** — generated on your machine, no data sent to external services
 
 ## Config Reference
 
@@ -160,7 +197,8 @@ src/
   },
   "preferences": {
     "currency": "SGD"
-  }
+  },
+  "userName": "YourName"
 }
 ```
 
