@@ -390,6 +390,7 @@ program
   .option('-f, --friend <name>', 'Friend name to target in meme')
   .option('-o, --output <file>', 'Save meme to file (default: ~/.auto-settle/meme.png)')
   .option('--zh', 'Use Chinese text')
+  .option('-w, --whatsapp', 'Generate WhatsApp share link (wa.me)')
   .action(async (options) => {
     try {
       const balances = await getBalance(options.friend);
@@ -417,9 +418,10 @@ program
       console.log('\n🎨 Meme generated!');
       console.log(`   ${outputPath}`);
 
-      // Generate GitHub raw URL if it's in assets/memes/
+      // Generate GitHub raw URL
       const fileName = path.basename(outputPath);
-      console.log(`   https://raw.githubusercontent.com/yuanfengli168/auto-settle/main/assets/memes/${fileName}`);
+      const memeUrl = `https://raw.githubusercontent.com/yuanfengli168/auto-settle/main/assets/memes/${fileName}`;
+      console.log(`   ${memeUrl}`);
       console.log();
 
       // Print summary
@@ -429,6 +431,33 @@ program
           console.log(`   ${b.friendName}: ${a.currency} ${Math.abs(a.amount).toFixed(2)} ${direction}`);
         }
       }
+
+      // WhatsApp share link
+      if (options.whatsapp) {
+        let phone = '';
+        let friendName = 'friend';
+        try {
+          const config = loadConfig();
+          phone = config.defaultRecipient?.phone?.replace('+', '') || '';
+          friendName = options.friend || config.defaultRecipient?.name || 'friend';
+        } catch { /* no config */ }
+
+        if (!phone) {
+          console.log('\n   ⚠️  No recipient phone in config. Set defaultRecipient.phone or use --to');
+        } else {
+          // Build message
+          const debtLines = balances.flatMap(b =>
+            b.amounts.map(a => `• ${a.currency} ${Math.abs(a.amount).toFixed(2)}`)
+          ).join('\n');
+          const msg = options.zh
+            ? `Hey ${friendName} 👋\n\n${userName}已付清，请你还钱！⏰\n\n💰 欠款：\n${debtLines}\n\n催债提醒：${memeUrl}\n\n— auto-settle 🤖`
+            : `Hey ${friendName} 👋\n\n${userName} paid his share. Now pay ${userName}! ⏰\n\n💰 Outstanding debts:\n${debtLines}\n\nSee: ${memeUrl}\n\n— auto-settle 🤖`;
+          const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+          console.log(`\n📱 WhatsApp link:`);
+          console.log(`   ${waUrl}\n`);
+        }
+      }
+
       console.log();
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
