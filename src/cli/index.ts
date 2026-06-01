@@ -14,6 +14,7 @@ import { settleUp } from '../core/settle.js';
 import { loadHistory, addPaymentRecord, createPaymentRecord, saveScreenshot } from '../core/history.js';
 import { verifyScreenshot, crossVerify } from '../core/verify.js';
 import { generateMeme } from '../core/meme.js';
+import { createExpense } from '../core/expense.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -374,6 +375,112 @@ program
         if (p.note) console.log(`     Note: ${p.note}`);
         if (p.qrShareUrl) console.log(`     QR: ${p.qrShareUrl}`);
         if (p.screenshotPath) console.log(`     Screenshot: ${p.screenshotPath}`);
+      }
+      console.log();
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── expense ──────────────────────────────────────────────────────────────────
+
+program
+  .command('expense')
+  .description('Create a new expense in Splitwise')
+  .requiredOption('-c, --cost <number>', 'Total cost of the expense', parseFloat)
+  .option('-C, --currency <code>', 'Currency code (SGD, USD, CNY, etc.)', 'SGD')
+  .requiredOption('-d, --description <text>', 'Description of the expense')
+  .option('-f, --friend <name>', 'Friend name to split with (can be repeated with commas)')
+  .option('--friend-id <ids>', 'Friend IDs to split with (comma-separated)')
+  .option('-s, --split <type>', 'Split type: even (default), percent, or fixed', 'even')
+  .option('--shares <amounts>', 'Share amounts (comma-separated, matches friend order)')
+  .option('--date <date>', 'Date of expense (YYYY-MM-DD, defaults to today)')
+  .option('--category <name>', 'Category name (e.g. Food, Transport, Shopping)')
+  .action(async (options) => {
+    try {
+      // Resolve friend IDs
+      let friendIds: number[] = [];
+      let friendNames: string[] = [];
+
+      if (options.friendId) {
+        friendIds = options.friendId.split(',').map((id: string) => parseInt(id.trim()));
+      }
+
+      if (options.friend) {
+        const names = options.friend.split(',').map((n: string) => n.trim());
+        for (const name of names) {
+          const balances = await getBalance(name);
+          if (balances.length === 0) {
+            console.error(`No friend found matching "${name}"`);
+            process.exit(1);
+          }
+          if (balances.length > 1) {
+            console.error(`Multiple friends match "${name}". Use --friend-id to specify:`);
+            balances.forEach(b => {
+              const amounts = b.amounts.map(a => `${a.currency} ${a.amount.toFixed(2)}`).join(', ');
+              console.log(`  ${b.friendName} (ID: ${b.friendId}) — ${amounts}`);
+            });
+            process.exit(1);
+          }
+          friendIds.push(balances[0].friendId);
+          friendNames.push(balances[0].friendName);
+        }
+      }
+
+      if (friendIds.length === 0) {
+        // Try default recipient
+        try {
+          const config = loadConfig();
+          if (config.defaultRecipient?.splitwiseFriendId) {
+            friendIds = [config.defaultRecipient.splitwiseFriendId];
+            friendNames = [config.defaultRecipient.name];
+          } else {
+            console.error('Error: --friend or --friend-id is required (or set defaultRecipient.splitwiseFriendId in config)');
+            process.exit(1);
+          }
+        } catch {
+          console.error('Error: --friend or --friend-id is required');
+          process.exit(1);
+        }
+      }
+
+      // Build splits
+      let shareValues: number[] = [];
+      if (options.shares) {
+        shareValues = options.shares.split(',').map((s: string) => parseFloat(s.trim()));
+      }
+
+      const splits = friendIds.map((id: number, i: number) => ({
+        friendId: id,
+        friendName: friendNames[i] || `Friend ${id}`,
+        share: shareValues[i] || (options.split === 'even' ? 0 : options.split === 'percent' ? Math.round(100 / friendIds.length) : 0),
+      }));
+
+      const result = await createExpense(
+        options.cost,
+        options.currency,
+        options.description,
+        splits,
+        options.date,
+        options.category
+      );
+
+      console.log('\n📝 Expense created!');
+      console.log(`   ID:          ${result.expenseId}`);
+      console.log(`   Cost:        ${result.currency} ${result.cost.toFixed(2)}`);
+      console.log(`   Description: ${result.description}`);
+      console.log(`   Split with:`);
+      for (const s of result.splitWith) {
+        const shareLabel = options.split === 'percent'
+          ? `${s.share}%`
+          : options.split === 'fixed'
+            ? `${result.currency} ${s.share.toFixed(2)}`
+            : 'even';
+        console.log(`     ${s.friendName} (${shareLabel})`);
+      }
+      if (result.currency !== 'SGD') {
+        console.log(`\n   💡 ${result.currency} expense created. PayNow only supports SGD for actual transfers.`);
       }
       console.log();
     } catch (err: any) {
