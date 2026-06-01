@@ -1,0 +1,31 @@
+{
+  "WFWorkflowActions": [
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.getclipboard",
+      "WFWorkflowActionParameters": {}
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.ask.text",
+      "WFWorkflowActionParameters": {
+        "WFAskActionDefault": "[[Clipboard]]",
+        "WFAskActionQuestion": "Confirm expense info:",
+        "WFAskActionType": "Text"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.sendmessage",
+      "WFWorkflowActionParameters": {
+        "WFSMSContact": "+6585933968",
+        "WFSMSBody": "📱 Expense: [[Ask:Text]]",
+        "WFServiceType": "WhatsApp"
+      }
+    }
+  ],
+  "WFWorkflowIcon": {
+    "WFWorkflowIconGlyphNumber": 60325,
+    "WFWorkflowIconColor": 4278255360
+  },
+  "WFWorkflowImportQuestions": [],
+  "WFWorkflowMinimumClientVersion": 411,
+  "WFWorkflowTypes": ["WatchKit", "NCWidget", "ActionExtension", "IntentsService"]
+}

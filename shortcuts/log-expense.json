@@ -1,0 +1,27 @@
+{
+  "WFWorkflowActions": [
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.ask.text",
+      "WFWorkflowActionParameters": {
+        "WFAskActionDefault": "",
+        "WFAskActionQuestion": "What did you spend? (e.g. \"SGD 45.60 at FairPrice\")",
+        "WFAskActionType": "Text"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.sendmessage",
+      "WFWorkflowActionParameters": {
+        "WFSMSContact": "+6585933968",
+        "WFSMSBody": "📱 Expense: [[Ask:Text]]",
+        "WFServiceType": "WhatsApp"
+      }
+    }
+  ],
+  "WFWorkflowIcon": {
+    "WFWorkflowIconGlyphNumber": 60325,
+    "WFWorkflowIconColor": 4278255360
+  },
+  "WFWorkflowImportQuestions": [],
+  "WFWorkflowMinimumClientVersion": 411,
+  "WFWorkflowTypes": ["WatchKit", "NCWidget", "ActionExtension", "IntentsService"]
+}

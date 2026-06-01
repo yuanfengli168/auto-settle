@@ -1,64 +1,106 @@
-# iOS Shortcuts for Auto-Settle
+# Manual Expense Shortcut
 
-Two iOS shortcuts for automatic expense tracking with Splitwise.
+A simple iOS Shortcut that lets you quickly send expense text to your AI assistant.
 
-## 1. Expense Notifier
+## Option A: Share Sheet Shortcut (Recommended)
 
-Automatically detects payment notifications and sends them to your AI assistant for Splitwise logging.
+This shortcut appears in the Share Sheet — when you copy a notification, just share it.
 
-### Setup
+### Import
 
-1. Open the link below on your iPhone
-2. Follow the Shortcut setup instructions
-3. Configure the automation trigger (see below)
+1. Open this link on your iPhone:
+   [Import Shortcut](https://www.icloud.com/shortcuts/YOUR_SHORTCUT_ID)
 
-### Automation Trigger
+   > Note: You'll need to create and upload the shortcut first. See "Manual Setup" below.
 
-Create a new Automation in the Shortcuts app:
+### Manual Setup
 
-1. **Settings → Shortcuts → Automations**
-2. **Create Personal Automation**
-3. **Trigger**: App → Select your banking/payment apps (DBS PayLah!, Apple Pay, etc.)
-4. **Action**: Run Shortcut → "Expense Notifier"
+Create the shortcut yourself in the Shortcuts app:
 
-The shortcut will:
-- Extract amount and merchant from the notification
-- Send a formatted message to your AI assistant via WhatsApp
-- Your assistant will parse it and ask you to confirm before creating the Splitwise expense
+1. Open **Shortcuts** app
+2. Tap **+** to create new
+3. Name it: **"Log Expense"**
 
-### Required Variables
+4. Add these actions in order:
 
-Edit the shortcut and set:
-- `RECIPIENT`: Your AI assistant's WhatsApp number (e.g., `+6585933968`)
+#### Step 1: Ask for Input
+- Action: **Ask for Input**
+- Type: **Text**
+- Prompt: `What did you spend? (e.g. "SGD 45.60 at FairPrice")`
 
-## 2. Manual Expense
+#### Step 2: Send via WhatsApp
+- Action: **Send Message via WhatsApp**
+- To: `+6585933968` (your assistant's number)
+- Message: `📱 Expense: [Input from Step 1]`
 
-For manually inputting expenses when you don't have a notification.
+#### Alternative: Send via Telegram
+If you prefer Telegram:
+- Action: **Send Message via Telegram**
+- To: your bot username `@lyf168_glm51bot`
+- Message: `📱 Expense: [Input from Step 1]`
 
-### Usage
+### Add to Home Screen
 
-Run the shortcut, enter:
-1. Amount (e.g., 45.60)
-2. Description (e.g., "FairPrice groceries")
-3. Choose split (even, or custom)
+1. Long-press the shortcut in Shortcuts app
+2. Tap **Details**
+3. Tap **Add to Home Screen**
+4. Now you have a one-tap expense logger!
 
-The shortcut sends the info to your AI assistant via WhatsApp.
+---
 
-## How It Works
+## Option B: Clipboard Shortcut (Fastest)
+
+This sends whatever's in your clipboard — just copy the notification text first.
+
+### Manual Setup
+
+1. Open **Shortcuts** app
+2. Tap **+** to create new
+3. Name it: **"Quick Expense"**
+
+4. Add these actions:
+
+#### Step 1: Get Clipboard
+- Action: **Get Clipboard**
+
+#### Step 2: Ask for confirmation
+- Action: **Ask for Input**
+- Type: **Text**
+- Default: **Clipboard** (from Step 1)
+- Prompt: `Confirm expense:`
+
+#### Step 3: Send via WhatsApp
+- Action: **Send Message via WhatsApp**
+- To: `+6585933968`
+- Message: `📱 Expense: [Input from Step 2]`
+
+---
+
+## Option C: Automation (Auto-forward notifications)
+
+See `expense-notifier.json` for the automation shortcut that triggers on payment app notifications.
+
+---
+
+## How It Works End-to-End
 
 ```
-iPhone Notification / Manual Input
-  → iOS Shortcut extracts amount + merchant
-  → Sends WhatsApp message to your AI assistant
-  → AI parses the message (auto-settle parse)
-  → AI asks: "Split with Winter Z?"
-  → You confirm
-  → AI creates Splitwise expense (auto-settle expense)
-  → Done! ✅
+1. You see a payment notification (Apple Pay / PayLah / bank SMS)
+2. Option A: Type or paste the expense info
+   Option B: Copy notification → tap Quick Expense
+   Option C: It auto-forwards (no action needed)
+3. AI assistant receives the message
+4. AI parses it with auto-settle parse
+5. AI asks: "Split with Winter Z? Even split?"
+6. You confirm
+7. AI creates Splitwise expense
+8. Done! ✅
 ```
 
-## Troubleshooting
+## Example Inputs
 
-- **Shortcut not triggering**: Make sure Shortcuts has notification access in Settings
-- **WhatsApp not opening**: Make sure WhatsApp is installed and you've messaged the assistant before
-- **Parsing errors**: The AI assistant can handle various formats, just send the raw notification text
+Any of these formats work:
+- `SGD 45.60 at FairPrice Finest`
+- `$120 dinner at Din Tai Fung`
+- `You paid SGD 12.50 at Toast Box`
+- `45.60 groceries`
