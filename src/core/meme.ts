@@ -230,7 +230,7 @@ export async function generateMeme(options: MemeOptions): Promise<string> {
   // Total line
   ctx.fillStyle = '#FFFFFF';
   ctx.font = 'bold 20px monospace';
-  ctx.fillText(isZh ? '⏰ 请尽快还款！' : 'TOTAL: Pay up already!', 80, rowY + 10);
+  ctx.fillText(isZh ? `⏰ ${userName}已付清，请你还钱！` : `${userName} paid his share. Now pay ${userName}! ⏰`, 80, rowY + 10);
 
   // ── Bottom bar — movie quote ──
   ctx.fillStyle = '#E94560';
