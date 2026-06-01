@@ -1,0 +1,49 @@
+{
+  "shortcut": {
+    "name": "Expense Notifier",
+    "description": "Detects payment notifications and sends to AI assistant for Splitwise expense tracking",
+    "color": 4278255360,
+    "icon": 60325,
+    "input": "shortcut",
+    "actions": [
+      {
+        "identifier": "is.workflow.actions.getnotificationcontent",
+        "parameters": {}
+      },
+      {
+        "identifier": "is.workflow.actions.text.match",
+        "parameters": {
+          "WFTextMatcher": "SGD|\\$|USD|CNY",
+          "WFTextMatchPattern": "SGD|\\$|USD|CNY|RMB|¥|€|£"
+        }
+      },
+      {
+        "identifier": "is.workflow.actions.conditional",
+        "parameters": {
+          "WFCondition": 1,
+          "WFConditionalActionMode": 0
+        }
+      },
+      {
+        "identifier": "is.workflow.actions.sendmessage",
+        "parameters": {
+          "WFSMSContact": "{{RECIPIENT}}",
+          "WFSMSBody": "📱 Expense notification:\n\n{{Notification Content}}\n\nPlease parse this and ask me how to split it."
+        }
+      },
+      {
+        "identifier": "is.workflow.actions.exit"
+      },
+      {
+        "identifier": "is.workflow.actions.conditional.else"
+      },
+      {
+        "identifier": "is.workflow.actions.sendmessage",
+        "parameters": {
+          "WFSMSContact": "{{RECIPIENT}}",
+          "WFSMSBody": "📱 Payment detected:\n\n{{Notification Content}}"
+        }
+      }
+    ]
+  }
+}

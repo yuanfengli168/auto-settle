@@ -15,6 +15,7 @@ import { loadHistory, addPaymentRecord, createPaymentRecord, saveScreenshot } fr
 import { verifyScreenshot, crossVerify } from '../core/verify.js';
 import { generateMeme } from '../core/meme.js';
 import { createExpense } from '../core/expense.js';
+import { parseExpenseText } from '../core/parse-expense.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.auto-settle');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -376,6 +377,83 @@ program
         if (p.qrShareUrl) console.log(`     QR: ${p.qrShareUrl}`);
         if (p.screenshotPath) console.log(`     Screenshot: ${p.screenshotPath}`);
       }
+      console.log();
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── parse ──────────────────────────────────────────────────────────────────
+
+program
+  .command('parse')
+  .description('Parse expense info from text (notification, screenshot OCR, etc.)')
+  .argument('<text>', 'Text to parse (e.g. "You paid SGD 45.60 at FairPrice")')
+  .option('--create', 'Auto-create expense in Splitwise after parsing')
+  .option('-f, --friend <name>', 'Friend to split with (for --create)')
+  .option('--friend-id <id>', 'Friend ID to split with (for --create)')
+  .action(async (text: string, options: any) => {
+    try {
+      const parsed = parseExpenseText(text);
+
+      console.log('\n📋 Parsed Expense:');
+      console.log(`   Amount:      ${parsed.amount !== null ? `${parsed.currency} ${parsed.amount.toFixed(2)}` : 'NOT FOUND'}`);
+      console.log(`   Description: ${parsed.description}`);
+      console.log(`   Confidence:  ${(parsed.confidence * 100).toFixed(0)}%`);
+
+      if (parsed.warnings.length > 0) {
+        console.log('\n   Warnings:');
+        parsed.warnings.forEach(w => console.log(`     ⚠️  ${w}`));
+      }
+
+      if (options.create && parsed.amount !== null) {
+        let friendIds: number[] = [];
+        let friendNames: string[] = [];
+
+        if (options.friendId) {
+          friendIds = [parseInt(options.friendId)];
+        } else if (options.friend) {
+          const balances = await getBalance(options.friend);
+          if (balances.length > 0) {
+            friendIds = [balances[0].friendId];
+            friendNames = [balances[0].friendName];
+          }
+        } else {
+          try {
+            const config = loadConfig();
+            if (config.defaultRecipient?.splitwiseFriendId) {
+              friendIds = [config.defaultRecipient.splitwiseFriendId];
+              friendNames = [config.defaultRecipient.name];
+            }
+          } catch { /* no config */ }
+        }
+
+        if (friendIds.length === 0) {
+          console.log('\n   ⚠️  No friend specified. Use --friend "Name" to create the expense.');
+          return;
+        }
+
+        const splits = friendIds.map((id: number, i: number) => ({
+          friendId: id,
+          friendName: friendNames[i] || `Friend ${id}`,
+          share: 0, // even split
+        }));
+
+        const result = await createExpense(
+          parsed.amount,
+          parsed.currency,
+          parsed.description,
+          splits
+        );
+
+        console.log('\n✅ Expense created in Splitwise!');
+        console.log(`   ID:          ${result.expenseId}`);
+        console.log(`   Cost:        ${result.currency} ${result.cost.toFixed(2)}`);
+        console.log(`   Description: ${result.description}`);
+        console.log(`   Split with:  ${result.splitWith.map(s => s.friendName).join(', ')}`);
+      }
+
       console.log();
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
