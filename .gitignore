@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 oauth.json
+!assets/memes/*.png
 *.png
 *.jpg
 .DS_Store
