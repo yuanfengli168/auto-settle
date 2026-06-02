@@ -17,21 +17,76 @@ export interface VerifyResult {
   warnings: string[];
 }
 
+interface LineInfo {
+  text: string;
+  height: number;
+  y0: number;
+}
+
+/**
+ * Extract lines with bounding boxes from OCR result using createWorker.
+ * Returns lines sorted by font height (largest first).
+ */
+async function extractLinesWithSize(imagePath: string): Promise<LineInfo[]> {
+  const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
+  try {
+    const ret = await worker.recognize(imagePath, {}, { text: true, blocks: true });
+    const data = ret.data;
+    const lines: LineInfo[] = [];
+    for (const block of (data.blocks || [])) {
+      for (const para of (block.paragraphs || [])) {
+        for (const line of (para.lines || [])) {
+          if (line.bbox) {
+            lines.push({
+              text: line.text.trim(),
+              height: line.bbox.y1 - line.bbox.y0,
+              y0: line.bbox.y0,
+            });
+          }
+        }
+      }
+    }
+    return lines;
+  } finally {
+    await worker.terminate();
+  }
+}
+
 /**
  * Verify a payment screenshot using OCR.
  *
  * Extracts: amount, currency, recipient name, payment status.
+ * Prioritizes large-font text (bigger bounding boxes) for amount extraction.
  * Returns structured data for confirmation before settling.
  */
 export async function verifyScreenshot(imagePath: string): Promise<VerifyResult> {
+  // Use createWorker for line-level bounding boxes (font size detection)
+  let sizedLines: LineInfo[] = [];
+  try {
+    sizedLines = await extractLinesWithSize(imagePath);
+  } catch {
+    // Fall back to simple recognize if createWorker fails
+  }
+
+  // Also run simple recognize for full text
   const result = await Tesseract.recognize(imagePath, 'eng', {
-    logger: () => {}, // suppress logs
+    logger: () => {},
   });
 
   const text = result.data.text;
   const confidence = result.data.confidence / 100;
 
-  // Extract amount: look for currency patterns like SGD 1.00, $3.00, 1.00 SGD
+  // Sort lines by height descending — largest font first
+  sizedLines.sort((a, b) => b.height - a.height);
+
+  // Build "large text" — lines in the top 25% by height
+  const heights = sizedLines.map(l => l.height).filter(h => h > 0);
+  const medianHeight = heights.length > 0 ? heights.sort((a, b) => a - b)[Math.floor(heights.length / 2)] : 0;
+  const largeLines = sizedLines.filter(l => l.height > medianHeight * 1.5);
+  const largeText = largeLines.map(l => l.text).join(' ');
+
+  // Extract amount: try large text FIRST, then fall back to all text
+  let amount: number | null = null;
   const amountPatterns = [
     /SGD\s*(\d+\.?\d*)/i,
     /\$\s*(\d+\.?\d*)/,
@@ -39,12 +94,22 @@ export async function verifyScreenshot(imagePath: string): Promise<VerifyResult>
     /(\d+\.\d{2})/,  // bare decimal like 1.00
   ];
 
-  let amount: number | null = null;
+  // Try large text first
   for (const pattern of amountPatterns) {
-    const match = text.match(pattern);
+    const match = largeText.match(pattern);
     if (match) {
       amount = parseFloat(match[1]);
       break;
+    }
+  }
+  // Fallback to full text if not found in large text
+  if (amount === null) {
+    for (const pattern of amountPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        amount = parseFloat(match[1]);
+        break;
+      }
     }
   }
 
@@ -55,27 +120,40 @@ export async function verifyScreenshot(imagePath: string): Promise<VerifyResult>
   else if (/CNY/i.test(text)) currency = 'CNY';
   else if (/\$/i.test(text)) currency = 'SGD'; // Default $ to SGD in Singapore context
 
-  // Extract recipient name — look for common patterns in bank transfer screenshots
-  // PayLah! shows recipient name in various positions, sometimes as image
+  // Extract recipient name — check large text first, then full text
   let recipientName: string | null = null;
 
-  // Common patterns across bank apps
+  // Try large text for recipient
   const recipientPatterns = [
     /(?:to|transfer\s+to|paid\s+to|sent\s+to)\s+([A-Z][A-Za-z\s]{1,30})/i,
     /([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s*(?:received|has received)/i,
-    // PayLah! pattern: sometimes "NAME" appears before "Successful"
     /^([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s*$/m,
   ];
 
+  const falsePositives = ['SGD', 'PayNow', 'Transfer', 'Transaction', 'Share', 'Comments', 'Successful', 'LOG', 'OUT'];
+
+  // Try in large text first
   for (const pattern of recipientPatterns) {
-    const match = text.match(pattern);
+    const match = largeText.match(pattern);
     if (match) {
       const name = match[1].trim();
-      // Filter out common false positives
-      const falsePositives = ['SGD', 'PayNow', 'Transfer', 'Transaction', 'Share', 'Comments', 'Successful', 'LOG', 'OUT'];
       if (!falsePositives.includes(name) && name.length > 1) {
         recipientName = name;
         break;
+      }
+    }
+  }
+
+  // Fallback to full text
+  if (!recipientName) {
+    for (const pattern of recipientPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const name = match[1].trim();
+        if (!falsePositives.includes(name) && name.length > 1) {
+          recipientName = name;
+          break;
+        }
       }
     }
   }
