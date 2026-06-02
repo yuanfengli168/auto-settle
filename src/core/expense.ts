@@ -34,7 +34,8 @@ export async function createExpense(
   description: string,
   splits: SplitDetail[],
   date?: string,
-  category?: string
+  category?: string,
+  receiptPath?: string
 ): Promise<CreateExpenseResult> {
   const sw = await getSplitwiseClient();
   const me = await sw.users.getCurrent();
@@ -95,6 +96,15 @@ export async function createExpense(
 
   if (category) {
     expenseData.category = category;
+  }
+
+  if (receiptPath) {
+    const fs = await import('fs');
+    const path = await import('path');
+    const buffer = fs.readFileSync(receiptPath);
+    const ext = path.extname(receiptPath).toLowerCase();
+    const mimeType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    expenseData.receipt = new Blob([buffer], { type: mimeType });
   }
 
   const expense = await sw.expenses.create(expenseData);

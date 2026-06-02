@@ -475,6 +475,7 @@ program
   .option('--shares <amounts>', 'Share amounts (comma-separated, matches friend order)')
   .option('--date <date>', 'Date of expense (YYYY-MM-DD, defaults to today)')
   .option('--category <name>', 'Category name (e.g. Food, Transport, Shopping)')
+  .option('-r, --receipt <path>', 'Path to receipt image to attach (PNG, JPG, GIF)')
   .action(async (options) => {
     try {
       // Resolve friend IDs
@@ -541,7 +542,8 @@ program
         options.description,
         splits,
         options.date,
-        options.category
+        options.category,
+        options.receipt
       );
 
       console.log('\n📝 Expense created!');
